@@ -3,9 +3,10 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
-from db import get_user_by_telegram_id, add_user, update_user_role
+from db import get_user_by_telegram_id, add_user, update_user_role, add_order
 from keyboards import role_kb, customer_kb, worker_kb
-from states import RegStates
+from states import RegStates, OrderStates
+from utils import is_valid_date
 
 router = Router()
 
@@ -79,3 +80,47 @@ async def cmd_profile(message: Message):
         )
     else:
         await message.answer("Пользователь не найден.")
+
+@router.message(Command("addorder"))
+async def start_add_order(message: Message, state: FSMContext):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "customer":
+        await message.answer("Эта команда только для заказчиков.")
+        return
+    await message.answer("Введите площадку (например, VK, Telegram, Instagram):")
+    await state.set_state(OrderStates.waiting_for_platform)
+
+@router.message(OrderStates.waiting_for_platform)
+async def order_platform(message: Message, state: FSMContext):
+    await state.update_data(platform=message.text)
+    await message.answer("Введите количество:")
+    await state.set_state(OrderStates.waiting_for_quantity)
+
+@router.message(OrderStates.waiting_for_quantity)
+async def order_quantity(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Пожалуйста, введите число.")
+        return
+    await state.update_data(quantity=int(message.text))
+    await message.answer("Введите дедлайн (например, 2025-07-01):")
+    await state.set_state(OrderStates.waiting_for_deadline)
+
+@router.message(OrderStates.waiting_for_deadline)
+async def order_deadline(message: Message, state: FSMContext):
+    if not is_valid_date(message.text):
+        await message.answer("Пожалуйста, введите дату в формате YYYY-MM-DD.")
+        return
+    data = await state.get_data()
+    platform = data["platform"]
+    quantity = data["quantity"]
+    deadline = message.text
+
+    user = get_user_by_telegram_id(message.from_user.id)
+    add_order(
+        customer_id=user[0],
+        platform=platform,
+        quantity=quantity,
+        deadline=deadline
+    )
+    await message.answer(f"Заказ создан!\nПлощадка: {platform}\nКол-во: {quantity}\nДедлайн: {deadline}")
+    await state.clear()
