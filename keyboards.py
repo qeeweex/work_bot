@@ -29,12 +29,14 @@ worker_kb = ReplyKeyboardMarkup(
 )
 
 
-def get_order_inline_kb(order_id, role, status):
-    buttons = []
-    if role == "worker" and status == "new":
-        buttons.append([InlineKeyboardButton(text="Взять заказ", callback_data=f"take_{order_id}")])
-    if role == "worker" and status == "in_progress":
-        buttons.append([InlineKeyboardButton(text="Завершить", callback_data=f"done_{order_id}")])
-    if role == "customer" and status == "new":
-        buttons.append([InlineKeyboardButton(text="Удалить", callback_data=f"delete_{order_id}")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+def get_order_inline_kb(order_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Взять заказ", callback_data=f"take_{order_id}"),
+            InlineKeyboardButton(text="Подробнее", callback_data=f"details_{order_id}")
+        ],
+        [
+            InlineKeyboardButton(text="Готово", callback_data=f"done_{order_id}"),
+            InlineKeyboardButton(text="Отменить", callback_data=f"cancel_{order_id}")
+        ]
+    ])
