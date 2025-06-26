@@ -23,7 +23,7 @@ async def cmd_workorders(message: Message):
             await message.answer(
                 format_order(order),
                 parse_mode="HTML",
-                reply_markup=get_order_inline_kb(order[0], user[3], order[6])
+                reply_markup=get_order_inline_kb(order[0])
             )
 
 @router.message(Command("myorders"))
