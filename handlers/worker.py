@@ -30,6 +30,17 @@ async def cmd_workorders(message: Message):
                 reply_markup=get_order_inline_kb(order[0])
             )
 
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await message.answer(
+        "<b>Доступные команды для исполнителя:</b>\n"
+        "/workorders — доступные заказы\n"
+        "/myorders — мои заказы\n"
+        "/changerole — сменить роль\n"
+        "❗️ Для работы с заказами используйте кнопки под сообщениями.",
+        parse_mode="HTML"
+    )
+
 @router.message(Command("myorders"))
 async def cmd_myorders(message: Message, state: FSMContext):
     await message.answer("Выберите, какие заказы показать:", reply_markup=history_filter_kb)
