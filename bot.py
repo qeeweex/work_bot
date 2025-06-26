@@ -8,13 +8,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import sqlite3
 
+from config import API_TOKEN, DB_NAME, ADMINS
 from db import (
     add_user, get_user_by_telegram_id, add_order, get_orders_by_customer,
-    assign_order_to_worker, get_free_orders, set_order_status, get_orders_by_worker, 
+    assign_order_to_worker, get_free_orders, set_order_status, get_orders_by_worker,
     delete_order, delete_done_orders
 )
-
-API_TOKEN = "7985036267:AAHl2fN-aN216zwgmCspvo1s2GOypZ-U-1k"  # Замените на свой токен
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,7 +43,6 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.set_state(RegStates.choosing_role)
 
 def update_user_role(telegram_id, new_role):
-    from db import DB_NAME
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET role = ? WHERE telegram_id = ?", (new_role, telegram_id))
@@ -247,7 +245,7 @@ async def cmd_done(message: Message):
     order_id = int(parts[1])
 
     # Проверяем, что заказ действительно принадлежит этому исполнителю и в работе
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM orders WHERE id = ? AND worker_id = ? AND status = 'in_progress'",
@@ -282,11 +280,6 @@ async def cmd_deleteorder(message: Message):
         await message.answer(f"Заказ №{order_id} удалён.")
     else:
         await message.answer("Не удалось удалить заказ. Можно удалять только свои новые заказы.")
-
-@dp.message(Command("cleardone"))
-async def cmd_cleardone(message: Message):
-    delete_done_orders()
-    await message.answer("Все завершённые заказы удалены.")
 
 async def main():
     await dp.start_polling(bot)
