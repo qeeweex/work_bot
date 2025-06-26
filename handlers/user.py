@@ -2,11 +2,15 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StateFilter
 
-from db import get_user_by_telegram_id, add_user, update_user_role, add_order, set_order_status, delete_done_orders
-from keyboards import role_kb, customer_kb, worker_kb
+from db import (
+    get_user_by_telegram_id, add_user, update_user_role, add_order,
+    set_order_status, delete_done_orders, get_orders_by_customer_and_status
+)
+from keyboards import role_kb, customer_kb, worker_kb, history_filter_kb
 from states import RegStates, OrderStates
-from utils import is_valid_date
+from utils import is_valid_date, format_order
 from config import ADMINS
 
 router = Router()
@@ -29,20 +33,6 @@ async def cmd_start(message: Message, state: FSMContext):
         parse_mode="HTML"
     )
     await state.set_state(RegStates.choosing_role)
-
-from aiogram.filters import Command
-
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    await message.answer(
-        "<b>Доступные команды:</b>\n"
-        "/profile — ваш профиль\n"
-        "/orders — ваши заказы\n"
-        "/addorder — добавить заказ\n"
-        "/changerole — сменить роль\n"
-        "❗️ Для работы с заказами используйте кнопки под сообщениями.",
-        parse_mode="HTML"
-    )
 
 @router.message(Command("changerole"))
 async def cmd_changerole(message: Message, state: FSMContext):
@@ -157,3 +147,37 @@ async def process_confirm_order(callback: CallbackQuery):
             "Можно начислить деньги исполнителю.",
             parse_mode="HTML"
         )
+
+@router.message(Command("orders"))
+async def cmd_orders(message: Message, state: FSMContext):
+    await message.answer("Выберите, какие заказы показать:", reply_markup=history_filter_kb)
+    await state.set_state("waiting_for_order_status")
+
+@router.message(StateFilter("waiting_for_order_status"), lambda m: m.text in ["Активные", "Выполненные", "Отменённые"])
+async def show_orders_by_status(message: Message, state: FSMContext):
+    user = get_user_by_telegram_id(message.from_user.id)
+    status_map = {
+        "Активные": "Активен",
+        "Выполненные": "Выполнен",
+        "Отменённые": "Отменён"
+    }
+    status = status_map[message.text]
+    orders = get_orders_by_customer_and_status(user[0], status)
+    if not orders:
+        await message.answer("Нет заказов с таким статусом.")
+    else:
+        for order in orders:
+            await message.answer(format_order(order), parse_mode="HTML")
+    await state.clear()
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await message.answer(
+        "<b>Доступные команды:</b>\n"
+        "/profile — ваш профиль\n"
+        "/orders — ваши заказы\n"
+        "/addorder — добавить заказ\n"
+        "/changerole — сменить роль\n"
+        "❗️ Для работы с заказами используйте кнопки под сообщениями.",
+        parse_mode="HTML"
+    )
