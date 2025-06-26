@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import sqlite3
 from states import RegStates, OrderStates
+from keyboards import role_kb
 
 from config import API_TOKEN, DB_NAME, ADMINS
 from db import (
@@ -21,14 +22,6 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
-
-role_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Я заказчик")],
-        [KeyboardButton(text="Я исполнитель")]
-    ],
-    resize_keyboard=True
-)
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
