@@ -2,8 +2,11 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from config import ADMINS
+from db import get_order_by_id
+from aiogram.types import Message, CallbackQuery
 
-from db import get_user_by_telegram_id, add_user, update_user_role, add_order
+from db import get_user_by_telegram_id, add_user, update_user_role, add_order, set_order_status, delete_done_orders
 from keyboards import role_kb, customer_kb, worker_kb
 from states import RegStates, OrderStates
 from utils import is_valid_date
@@ -37,6 +40,21 @@ async def cmd_changerole(message: Message, state: FSMContext):
         return
     await message.answer("Выберите новую роль:", reply_markup=role_kb)
     await state.set_state(RegStates.choosing_role)
+
+@router.callback_query(lambda c: c.data.startswith("confirm_"))
+async def process_confirm_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    # Меняем статус заказа на "Выполнен"
+    set_order_status(order_id, "Выполнен")  # или "done", если в БД на английском
+    # Удаляем все завершённые заказы
+    delete_done_orders()
+    await callback.message.edit_text("Вы подтвердили выполнение заказа! Администратор уведомлён.", parse_mode="HTML")
+    # Уведомляем админа
+    for admin_id in ADMINS:
+        await callback.bot.send_message(
+            admin_id,
+            f"Заказ №{order_id} подтверждён заказчиком! Можно начислить деньги исполнителю."
+        )
 
 @router.message(RegStates.choosing_role)
 async def process_role(message: Message, state: FSMContext):
