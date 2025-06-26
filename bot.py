@@ -1,14 +1,15 @@
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import sqlite3
+
 from states import RegStates, OrderStates
 from keyboards import role_kb
+from utils import format_order, is_valid_date
 
 from config import API_TOKEN, DB_NAME, ADMINS
 from db import (
@@ -71,7 +72,6 @@ async def process_role(message: Message, state: FSMContext):
         await message.answer(f"Вы зарегистрированы как {'заказчик' if role == 'customer' else 'исполнитель'}!", reply_markup=types.ReplyKeyboardRemove())
     await state.clear()
 
-
 @dp.message(Command("addorder"))
 async def start_add_order(message: Message, state: FSMContext):
     user = get_user_by_telegram_id(message.from_user.id)
@@ -98,6 +98,9 @@ async def order_quantity(message: Message, state: FSMContext):
 
 @dp.message(OrderStates.waiting_for_deadline)
 async def order_deadline(message: Message, state: FSMContext):
+    if not is_valid_date(message.text):
+        await message.answer("Пожалуйста, введите дату в формате YYYY-MM-DD.")
+        return
     data = await state.get_data()
     platform = data["platform"]
     quantity = data["quantity"]
@@ -163,7 +166,7 @@ async def cmd_orders(message: Message):
     else:
         text = "Ваши заказы:\n"
         for order in orders:
-            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Статус: {order[6]}\n"
+            text += format_order(order) + "\n"
         await message.answer(text)
 
 @dp.message(Command("workorders"))
@@ -178,7 +181,7 @@ async def cmd_workorders(message: Message):
     else:
         text = "Доступные заказы:\n"
         for order in orders:
-            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Дедлайн: {order[5]}\n"
+            text += format_order(order) + "\n"
         await message.answer(text)
 
 @dp.message(Command("myorders"))
@@ -193,7 +196,7 @@ async def cmd_myorders(message: Message):
     else:
         text = "Ваши заказы:\n"
         for order in orders:
-            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Статус: {order[6]}\n"
+            text += format_order(order) + "\n"
         await message.answer(text)
 
 @dp.message(Command("takeorder"))
