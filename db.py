@@ -152,7 +152,7 @@ def delete_order(order_id, customer_id):
 def delete_done_orders():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM orders WHERE status = 'done'")
+    cursor.execute("DELETE FROM orders WHERE status = 'Выполнен'")  # статус должен быть именно 'Выполнен'
     conn.commit()
     conn.close()
 
@@ -170,6 +170,24 @@ def get_all_users():
     users = cursor.fetchall()
     conn.close()
     return users
+
+def get_order_by_id(order_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    order = cursor.fetchone()
+    conn.close()
+    return order
+
+def get_user_by_id(user_id):
+    import sqlite3
+    from config import DB_NAME
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    return user
 
 if __name__ == "__main__":
     init_db()
