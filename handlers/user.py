@@ -30,6 +30,20 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await state.set_state(RegStates.choosing_role)
 
+from aiogram.filters import Command
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    await message.answer(
+        "<b>Доступные команды:</b>\n"
+        "/profile — ваш профиль\n"
+        "/orders — ваши заказы\n"
+        "/addorder — добавить заказ\n"
+        "/changerole — сменить роль\n"
+        "❗️ Для работы с заказами используйте кнопки под сообщениями.",
+        parse_mode="HTML"
+    )
+
 @router.message(Command("changerole"))
 async def cmd_changerole(message: Message, state: FSMContext):
     user = get_user_by_telegram_id(message.from_user.id)
