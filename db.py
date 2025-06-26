@@ -94,5 +94,27 @@ def get_all_orders():
     conn.close()
     return orders
 
+def assign_order_to_worker(order_id, worker_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET worker_id = ?, status = 'in_progress' WHERE id = ? AND status = 'new'",
+        (worker_id, order_id)
+    )
+    conn.commit()
+    updated = cursor.rowcount
+    conn.close()
+    return updated > 0
+
+def get_free_orders():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM orders WHERE status = 'new' AND worker_id IS NULL"
+    )
+    orders = cursor.fetchall()
+    conn.close()
+    return orders
+
 if __name__ == "__main__":
     init_db()
