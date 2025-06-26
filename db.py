@@ -116,5 +116,45 @@ def get_free_orders():
     conn.close()
     return orders
 
+def set_order_status(order_id, status):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE orders SET status = ? WHERE id = ?",
+        (status, order_id)
+    )
+    conn.commit()
+    conn.close()
+
+def get_orders_by_worker(worker_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM orders WHERE worker_id = ?",
+        (worker_id,)
+    )
+    orders = cursor.fetchall()
+    conn.close()
+    return orders
+
+def delete_order(order_id, customer_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM orders WHERE id = ? AND customer_id = ? AND status = 'new'",
+        (order_id, customer_id)
+    )
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted > 0
+
+def delete_done_orders():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM orders WHERE status = 'done'")
+    conn.commit()
+    conn.close()
+
 if __name__ == "__main__":
     init_db()
