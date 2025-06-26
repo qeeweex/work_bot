@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 
-from db import add_user, get_user_by_telegram_id, add_order, get_orders_by_customer
+from db import add_user, get_user_by_telegram_id, add_order, get_orders_by_customer, assign_order_to_worker, get_free_orders
 
 API_TOKEN = "7985036267:AAHl2fN-aN216zwgmCspvo1s2GOypZ-U-1k"  # Замените на свой токен
 
@@ -96,6 +96,7 @@ async def cmd_help(message: Message):
         await message.answer(
             "/profile — ваш профиль\n"
             "/workorders — доступные заказы\n"
+            "/takeorder <id> — взять заказ\n"
             "/changerole — сменить роль"
         )
     else:
@@ -145,14 +146,33 @@ async def cmd_workorders(message: Message):
     if not user or user[3] != "worker":
         await message.answer("Эта команда только для исполнителей.")
         return
-    orders = get_orders_by_customer(None)  # Здесь можно реализовать выбор всех новых заказов
+    orders = get_free_orders()
     if not orders:
         await message.answer("Нет доступных заказов.")
     else:
         text = "Доступные заказы:\n"
         for order in orders:
-            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Статус: {order[6]}\n"
+            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Дедлайн: {order[5]}\n"
         await message.answer(text)
+
+@dp.message(Command("takeorder"))
+async def cmd_takeorder(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "worker":
+        await message.answer("Эта команда только для исполнителей.")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Используйте команду так: /takeorder <id_заказа>")
+        return
+
+    order_id = int(parts[1])
+    success = assign_order_to_worker(order_id, user[0])
+    if success:
+        await message.answer(f"Вы взяли заказ №{order_id} в работу!")
+    else:
+        await message.answer("Не удалось взять заказ. Возможно, его уже взяли или он не существует.")
 
 async def main():
     await dp.start_polling(bot)
