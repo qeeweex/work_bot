@@ -2,7 +2,6 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StateFilter
 
 from db import (
     get_user_by_telegram_id, add_user, update_user_role, add_order,
@@ -153,22 +152,24 @@ async def cmd_orders(message: Message, state: FSMContext):
     await message.answer("Выберите, какие заказы показать:", reply_markup=history_filter_kb)
     await state.set_state("waiting_for_order_status")
 
-@router.message(StateFilter("waiting_for_order_status"), lambda m: m.text in ["Активные", "Выполненные", "Отменённые"])
+@router.message()
 async def show_orders_by_status(message: Message, state: FSMContext):
-    user = get_user_by_telegram_id(message.from_user.id)
-    status_map = {
-        "Активные": "Активен",
-        "Выполненные": "Выполнен",
-        "Отменённые": "Отменён"
-    }
-    status = status_map[message.text]
-    orders = get_orders_by_customer_and_status(user[0], status)
-    if not orders:
-        await message.answer("Нет заказов с таким статусом.")
-    else:
-        for order in orders:
-            await message.answer(format_order(order), parse_mode="HTML")
-    await state.clear()
+    current_state = await state.get_state()
+    if current_state == "waiting_for_order_status" and message.text in ["Активные", "Выполненные", "Отменённые"]:
+        user = get_user_by_telegram_id(message.from_user.id)
+        status_map = {
+            "Активные": "Активен",
+            "Выполненные": "Выполнен",
+            "Отменённые": "Отменён"
+        }
+        status = status_map[message.text]
+        orders = get_orders_by_customer_and_status(user[0], status)
+        if not orders:
+            await message.answer("Нет заказов с таким статусом.")
+        else:
+            for order in orders:
+                await message.answer(format_order(order), parse_mode="HTML")
+        await state.clear()
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
