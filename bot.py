@@ -8,7 +8,7 @@ import logging
 import sqlite3
 
 from states import RegStates, OrderStates
-from keyboards import role_kb
+from keyboards import role_kb, customer_kb, worker_kb
 from utils import format_order, is_valid_date
 
 from config import API_TOKEN, DB_NAME, ADMINS
@@ -62,14 +62,20 @@ async def process_role(message: Message, state: FSMContext):
     user = get_user_by_telegram_id(message.from_user.id)
     if user:
         update_user_role(message.from_user.id, role)
-        await message.answer(f"Ваша роль изменена на {'заказчик' if role == 'customer' else 'исполнитель'}!", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(
+            f"Ваша роль изменена на {'заказчик' if role == 'customer' else 'исполнитель'}!",
+            reply_markup=customer_kb if role == "customer" else worker_kb
+        )
     else:
         add_user(
             telegram_id=message.from_user.id,
             username=message.from_user.username,
             role=role
         )
-        await message.answer(f"Вы зарегистрированы как {'заказчик' if role == 'customer' else 'исполнитель'}!", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(
+            f"Вы зарегистрированы как {'заказчик' if role == 'customer' else 'исполнитель'}!",
+            reply_markup=customer_kb if role == "customer" else worker_kb
+        )
     await state.clear()
 
 @dp.message(Command("addorder"))
@@ -124,21 +130,11 @@ async def cmd_help(message: Message):
         return
     if user[3] == "customer":
         await message.answer(
-            "/profile — ваш профиль\n"
-            "/orders — ваши заказы\n"
-            "/addorder — добавить заказ\n"
-            "/deleteorder <id> — удалить заказ\n"
-            "/changerole — сменить роль"
+            "Доступные команды:", reply_markup=customer_kb
         )
     elif user[3] == "worker":
         await message.answer(
-            "/profile — ваш профиль\n"
-            "/orders — ваши заказы\n"
-            "/workorders — доступные заказы\n"
-            "/myorders — ваши взятые заказы\n"
-            "/takeorder <id> — взять заказ\n"
-            "/done <id> — завершить заказ\n"
-            "/changerole — сменить роль"
+            "Доступные команды:", reply_markup=worker_kb
         )
     else:
         await message.answer("Неизвестная роль пользователя.")
