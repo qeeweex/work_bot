@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import sqlite3
+from states import RegStates, OrderStates
 
 from config import API_TOKEN, DB_NAME, ADMINS
 from db import (
@@ -20,10 +21,6 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
-
-# FSM для выбора роли
-class RegStates(StatesGroup):
-    choosing_role = State()
 
 role_kb = ReplyKeyboardMarkup(
     keyboard=[
@@ -81,11 +78,6 @@ async def process_role(message: Message, state: FSMContext):
         await message.answer(f"Вы зарегистрированы как {'заказчик' if role == 'customer' else 'исполнитель'}!", reply_markup=types.ReplyKeyboardRemove())
     await state.clear()
 
-# FSM для создания заказа
-class OrderStates(StatesGroup):
-    waiting_for_platform = State()
-    waiting_for_quantity = State()
-    waiting_for_deadline = State()
 
 @dp.message(Command("addorder"))
 async def start_add_order(message: Message, state: FSMContext):
