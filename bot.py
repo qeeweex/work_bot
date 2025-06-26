@@ -1,14 +1,14 @@
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 import sqlite3
 
 from states import RegStates, OrderStates
-from keyboards import role_kb, customer_kb, worker_kb
+from keyboards import role_kb, customer_kb, worker_kb, get_order_inline_kb
 from utils import format_order, is_valid_date
 
 from config import API_TOKEN, DB_NAME, ADMINS
@@ -28,9 +28,19 @@ dp = Dispatcher(storage=storage)
 async def cmd_start(message: Message, state: FSMContext):
     user = get_user_by_telegram_id(message.from_user.id)
     if user:
-        await message.answer("Вы уже зарегистрированы.\nИспользуйте /help для списка команд.")
+        await message.answer(
+            "👋 <b>Вы уже зарегистрированы!</b>\n"
+            "ℹ️ Используйте /help для списка команд.",
+            parse_mode="HTML"
+        )
         return
-    await message.answer("Выберите вашу роль:", reply_markup=role_kb)
+    await message.answer(
+        "👋 <b>Добро пожаловать в WorkBot!</b>\n\n"
+        "📝 Здесь вы можете создавать и выполнять заказы.\n"
+        "👇 Для начала выберите вашу роль:",
+        reply_markup=role_kb,
+        parse_mode="HTML"
+    )
     await state.set_state(RegStates.choosing_role)
 
 def update_user_role(telegram_id, new_role):
@@ -130,11 +140,26 @@ async def cmd_help(message: Message):
         return
     if user[3] == "customer":
         await message.answer(
-            "Доступные команды:", reply_markup=customer_kb
+            "<b>Доступные команды:</b>\n"
+            "/profile — ваш профиль\n"
+            "/orders — ваши заказы\n"
+            "/addorder — добавить заказ\n"
+            "/changerole — сменить роль\n\n"
+            "❗️ Для удаления заказа используйте кнопку <b>Удалить</b> под нужным заказом.",
+            parse_mode="HTML",
+            reply_markup=customer_kb
         )
     elif user[3] == "worker":
         await message.answer(
-            "Доступные команды:", reply_markup=worker_kb
+            "<b>Доступные команды:</b>\n"
+            "/profile — ваш профиль\n"
+            "/orders — ваши заказы\n"
+            "/workorders — доступные заказы\n"
+            "/myorders — ваши взятые заказы\n"
+            "/changerole — сменить роль\n\n"
+            "❗️ Для взятия или завершения заказа используйте кнопки <b>Взять заказ</b> и <b>Завершить</b> под заказом.",
+            parse_mode="HTML",
+            reply_markup=worker_kb
         )
     else:
         await message.answer("Неизвестная роль пользователя.")
@@ -143,7 +168,13 @@ async def cmd_help(message: Message):
 async def cmd_profile(message: Message):
     user = get_user_by_telegram_id(message.from_user.id)
     if user:
-        await message.answer(f"Ваш профиль:\nID: {user[0]}\nUsername: {user[2]}\nРоль: {user[3]}")
+        await message.answer(
+            f"<b>Ваш профиль</b>\n"
+            f"ID: <code>{user[0]}</code>\n"
+            f"Username: @{user[2]}\n"
+            f"Роль: <i>{user[3]}</i>",
+            parse_mode="HTML"
+        )
     else:
         await message.answer("Пользователь не найден.")
 
@@ -160,10 +191,12 @@ async def cmd_orders(message: Message):
     if not orders:
         await message.answer("У вас пока нет заказов.")
     else:
-        text = "Ваши заказы:\n"
         for order in orders:
-            text += format_order(order) + "\n"
-        await message.answer(text)
+            await message.answer(
+                format_order(order),
+                parse_mode="HTML",
+                reply_markup=get_order_inline_kb(order[0], user[3], order[6])
+            )
 
 @dp.message(Command("workorders"))
 async def cmd_workorders(message: Message):
@@ -175,10 +208,12 @@ async def cmd_workorders(message: Message):
     if not orders:
         await message.answer("Нет доступных заказов.")
     else:
-        text = "Доступные заказы:\n"
         for order in orders:
-            text += format_order(order) + "\n"
-        await message.answer(text)
+            await message.answer(
+                format_order(order),
+                parse_mode="HTML",
+                reply_markup=get_order_inline_kb(order[0], user[3], order[6])
+            )
 
 @dp.message(Command("myorders"))
 async def cmd_myorders(message: Message):
@@ -190,80 +225,52 @@ async def cmd_myorders(message: Message):
     if not orders:
         await message.answer("У вас пока нет взятых заказов.")
     else:
-        text = "Ваши заказы:\n"
         for order in orders:
-            text += format_order(order) + "\n"
-        await message.answer(text)
+            await message.answer(
+                format_order(order),
+                parse_mode="HTML",
+                reply_markup=get_order_inline_kb(order[0], user[3], order[6])
+            )
+
+@dp.callback_query(lambda c: c.data.startswith("take_"))
+async def process_take_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    user = get_user_by_telegram_id(callback.from_user.id)
+    success = assign_order_to_worker(order_id, user[0])
+    if success:
+        await callback.message.edit_text("Вы взяли заказ!", parse_mode="HTML")
+    else:
+        await callback.answer("Не удалось взять заказ.", show_alert=True)
+
+@dp.callback_query(lambda c: c.data.startswith("done_"))
+async def process_done_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    user = get_user_by_telegram_id(callback.from_user.id)
+    set_order_status(order_id, "done")
+    delete_done_orders()
+    await callback.message.edit_text("Заказ завершён и удалён!", parse_mode="HTML")
+
+@dp.callback_query(lambda c: c.data.startswith("delete_"))
+async def process_delete_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    user = get_user_by_telegram_id(callback.from_user.id)
+    success = delete_order(order_id, user[0])
+    if success:
+        await callback.message.edit_text("Заказ удалён!", parse_mode="HTML")
+    else:
+        await callback.answer("Не удалось удалить заказ.", show_alert=True)
 
 @dp.message(Command("takeorder"))
 async def cmd_takeorder(message: Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user or user[3] != "worker":
-        await message.answer("Эта команда только для исполнителей.")
-        return
-
-    parts = message.text.strip().split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("Используйте команду так: /takeorder <id_заказа>")
-        return
-
-    order_id = int(parts[1])
-    success = assign_order_to_worker(order_id, user[0])
-    if success:
-        await message.answer(f"Вы взяли заказ №{order_id} в работу!")
-    else:
-        await message.answer("Не удалось взять заказ. Возможно, его уже взяли или он не существует.")
+    await message.answer("Теперь заказы берутся через кнопки под каждым заказом!")
 
 @dp.message(Command("done"))
 async def cmd_done(message: Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user or user[3] != "worker":
-        await message.answer("Эта команда только для исполнителей.")
-        return
-
-    parts = message.text.strip().split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("Используйте команду так: /done <id_заказа>")
-        return
-
-    order_id = int(parts[1])
-
-    # Проверяем, что заказ действительно принадлежит этому исполнителю и в работе
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM orders WHERE id = ? AND worker_id = ? AND status = 'in_progress'",
-        (order_id, user[0])
-    )
-    order = cursor.fetchone()
-    conn.close()
-
-    if not order:
-        await message.answer("Вы не можете завершить этот заказ (он не ваш или не в работе).")
-        return
-
-    set_order_status(order_id, "done")
-    delete_done_orders()
-    await message.answer(f"Заказ №{order_id} отмечен как выполненный и удалён из базы!")
+    await message.answer("Теперь завершать заказы можно через кнопки под каждым заказом!")
 
 @dp.message(Command("deleteorder"))
 async def cmd_deleteorder(message: Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user or user[3] != "customer":
-        await message.answer("Эта команда только для заказчиков.")
-        return
-
-    parts = message.text.strip().split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("Используйте команду так: /deleteorder <id_заказа>")
-        return
-
-    order_id = int(parts[1])
-    success = delete_order(order_id, user[0])
-    if success:
-        await message.answer(f"Заказ №{order_id} удалён.")
-    else:
-        await message.answer("Не удалось удалить заказ. Можно удалять только свои новые заказы.")
+    await message.answer("Теперь удалять заказы можно через кнопки под каждым заказом!")
 
 async def main():
     await dp.start_polling(bot)
