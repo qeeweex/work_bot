@@ -1,18 +1,16 @@
 from datetime import datetime
 
 def format_order(order):
-    status_map = {
-        "new": "🆕 Новый",
-        "in_progress": "⏳ В работе",
-        "done": "✅ Выполнен"
-    }
+    """
+    order — кортеж или словарь с полями:
+    id, customer_id, platform, quantity, deadline, status
+    """
     return (
-        f"📝 <b>ID:</b> <code>{order[0]}</code>\n"
-        f"📱 <b>Площадка:</b> {order[3]}\n"
-        f"🔢 <b>Кол-во:</b> {order[4]}\n"
-        f"⏰ <b>Дедлайн:</b> {order[5]}\n"
-        f"🏷 <b>Статус:</b> {status_map.get(order[6], order[6])}\n"
-        "────────────"
+        f"📝 <b>Новый заказ!</b>\n\n"
+        f"<b>Площадка:</b> {order[2]}\n"
+        f"<b>Кол-во:</b> {order[3]}\n"
+        f"<b>Дедлайн:</b> {order[4]}\n\n"
+        f"⏳ <i>Ожидает исполнителя</i>"
     )
 
 def is_valid_date(date_str):
