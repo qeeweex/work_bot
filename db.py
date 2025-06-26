@@ -189,5 +189,21 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
+def get_orders_by_customer_and_status(customer_id, status):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE customer_id = ? AND status = ?", (customer_id, status))
+    orders = cursor.fetchall()
+    conn.close()
+    return orders
+
+def get_orders_by_worker_and_status(worker_id, status):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE worker_id = ? AND status = ?", (worker_id, status))
+    orders = cursor.fetchall()
+    conn.close()
+    return orders
+
 if __name__ == "__main__":
     init_db()
