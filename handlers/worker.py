@@ -1,8 +1,10 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from config import ADMINS
+from db import get_order_by_id
 
-from db import get_user_by_telegram_id, get_free_orders, get_orders_by_worker, assign_order_to_worker, set_order_status, delete_done_orders
+from db import get_user_by_telegram_id, get_free_orders, get_orders_by_worker, assign_order_to_worker, set_order_status, delete_done_orders, get_user_by_id
 from keyboards import get_order_inline_kb
 from utils import format_order
 
@@ -57,5 +59,23 @@ async def process_done_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[1])
     user = get_user_by_telegram_id(callback.from_user.id)
     set_order_status(order_id, "done")
-    delete_done_orders()
-    await callback.message.edit_text("Заказ завершён и удалён!", parse_mode="HTML")
+    order = get_order_by_id(order_id)
+    # Получаем telegram_id заказчика
+    customer = get_user_by_id(order[1])
+    telegram_id = customer[1]  # (id, telegram_id, ...)
+    await callback.message.edit_text("Заказ завершён и отправлен на проверку заказчику!", parse_mode="HTML")
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Подтвердить выполнение", callback_data=f"confirm_{order_id}")]
+    ])
+    await callback.bot.send_message(
+        telegram_id,
+        f"Ваш заказ №{order_id} выполнен исполнителем!\nПроверьте результат и подтвердите выполнение.",
+        reply_markup=confirm_kb
+    )
+    # Уведомляем админа
+    for admin_id in ADMINS:
+        await callback.bot.send_message(
+            admin_id,
+            f"Заказ №{order_id} отмечен исполнителем как выполненный и отправлен заказчику на подтверждение."
+        )
