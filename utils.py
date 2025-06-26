@@ -1,16 +1,18 @@
 from datetime import datetime
 
 def format_order(order):
-    """
-    Преобразует кортеж заказа в красивую строку для вывода пользователю.
-    order: (id, customer_id, worker_id, platform, quantity, deadline, status, created_at)
-    """
+    status_map = {
+        "new": "🆕 Новый",
+        "in_progress": "⏳ В работе",
+        "done": "✅ Выполнен"
+    }
     return (
-        f"ID: {order[0]}, "
-        f"Площадка: {order[3]}, "
-        f"Кол-во: {order[4]}, "
-        f"Дедлайн: {order[5]}, "
-        f"Статус: {order[6]}"
+        f"📝 <b>ID:</b> <code>{order[0]}</code>\n"
+        f"📱 <b>Площадка:</b> {order[3]}\n"
+        f"🔢 <b>Кол-во:</b> {order[4]}\n"
+        f"⏰ <b>Дедлайн:</b> {order[5]}\n"
+        f"🏷 <b>Статус:</b> {status_map.get(order[6], order[6])}\n"
+        "────────────"
     )
 
 def is_valid_date(date_str):
