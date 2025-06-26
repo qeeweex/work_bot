@@ -156,5 +156,20 @@ def delete_done_orders():
     conn.commit()
     conn.close()
 
+def update_user_role(telegram_id, new_role):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET role = ? WHERE telegram_id = ?", (new_role, telegram_id))
+    conn.commit()
+    conn.close()
+
+def get_all_users():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    return users
+
 if __name__ == "__main__":
     init_db()
