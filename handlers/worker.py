@@ -2,9 +2,8 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from config import ADMINS
-from db import get_order_by_id
-
-from db import get_user_by_telegram_id, get_free_orders, get_orders_by_worker, assign_order_to_worker, set_order_status, delete_done_orders, get_user_by_id
+from db import get_order_by_id, get_user_by_id
+from db import get_user_by_telegram_id, get_free_orders, get_orders_by_worker, assign_order_to_worker, set_order_status
 from keyboards import get_order_inline_kb
 from utils import format_order
 
@@ -58,24 +57,34 @@ async def process_take_order(callback: CallbackQuery):
 async def process_done_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[1])
     user = get_user_by_telegram_id(callback.from_user.id)
-    set_order_status(order_id, "done")
+    set_order_status(order_id, "Выполнен")
     order = get_order_by_id(order_id)
-    # Получаем telegram_id заказчика
     customer = get_user_by_id(order[1])
     telegram_id = customer[1]  # (id, telegram_id, ...)
-    await callback.message.edit_text("Заказ завершён и отправлен на проверку заказчику!", parse_mode="HTML")
+    # Сообщение исполнителю
+    await callback.message.edit_text(
+        "✅ <b>Заказ отправлен на проверку!</b>\n"
+        "Ваш заказ отправлен заказчику. Ожидайте подтверждения.",
+        parse_mode="HTML"
+    )
+    # Кнопка для заказчика
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Подтвердить выполнение", callback_data=f"confirm_{order_id}")]
     ])
+    # Сообщение заказчику
     await callback.bot.send_message(
         telegram_id,
-        f"Ваш заказ №{order_id} выполнен исполнителем!\nПроверьте результат и подтвердите выполнение.",
-        reply_markup=confirm_kb
+        f"📝 <b>Ваш заказ №{order_id} выполнен!</b>\n"
+        "Проверьте результат и, если всё хорошо, подтвердите выполнение заказа.",
+        reply_markup=confirm_kb,
+        parse_mode="HTML"
     )
-    # Уведомляем админа
+    # Сообщение админу
     for admin_id in ADMINS:
         await callback.bot.send_message(
             admin_id,
-            f"Заказ №{order_id} отмечен исполнителем как выполненный и отправлен заказчику на подтверждение."
+            f"🔔 <b>Заказ №{order_id} выполнен исполнителем</b>\n"
+            "Ожидает подтверждения заказчиком.",
+            parse_mode="HTML"
         )
