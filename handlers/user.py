@@ -33,6 +33,33 @@ async def cmd_start(message: Message, state: FSMContext):
     )
     await state.set_state(RegStates.choosing_role)
 
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user:
+        await message.answer("Сначала зарегистрируйтесь через /start.")
+        return
+    if user[3] == "worker":
+        await message.answer(
+            "<b>Доступные команды для исполнителя:</b>\n"
+            "/profile — ваш профиль\n"
+            "/workorders — доступные заказы\n"
+            "/myorders — мои заказы\n"
+            "/changerole — сменить роль\n"
+            "❗️ Для работы с заказами используйте кнопки под сообщениями.",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "<b>Доступные команды для заказчика:</b>\n"
+            "/profile — ваш профиль\n"
+            "/orders — ваши заказы\n"
+            "/addorder — добавить заказ\n"
+            "/changerole — сменить роль\n"
+            "❗️ Для работы с заказами используйте кнопки под сообщениями.",
+            parse_mode="HTML"
+        )
+
 @router.message(Command("changerole"))
 async def cmd_changerole(message: Message, state: FSMContext):
     user = get_user_by_telegram_id(message.from_user.id)
@@ -170,15 +197,3 @@ async def show_orders_by_status(message: Message, state: FSMContext):
             for order in orders:
                 await message.answer(format_order(order), parse_mode="HTML")
         await state.clear()
-
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    await message.answer(
-        "<b>Доступные команды:</b>\n"
-        "/profile — ваш профиль\n"
-        "/orders — ваши заказы\n"
-        "/addorder — добавить заказ\n"
-        "/changerole — сменить роль\n"
-        "❗️ Для работы с заказами используйте кнопки под сообщениями.",
-        parse_mode="HTML"
-    )
