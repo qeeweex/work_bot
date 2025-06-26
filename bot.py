@@ -6,8 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 import logging
+import sqlite3
 
-from db import add_user, get_user_by_telegram_id, add_order, get_orders_by_customer, assign_order_to_worker, get_free_orders
+from db import (
+    add_user, get_user_by_telegram_id, add_order, get_orders_by_customer,
+    assign_order_to_worker, get_free_orders, set_order_status, get_orders_by_worker, 
+    delete_order, delete_done_orders
+)
 
 API_TOKEN = "7985036267:AAHl2fN-aN216zwgmCspvo1s2GOypZ-U-1k"  # Замените на свой токен
 
@@ -39,7 +44,6 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.set_state(RegStates.choosing_role)
 
 def update_user_role(telegram_id, new_role):
-    import sqlite3
     from db import DB_NAME
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -79,6 +83,53 @@ async def process_role(message: Message, state: FSMContext):
         await message.answer(f"Вы зарегистрированы как {'заказчик' if role == 'customer' else 'исполнитель'}!", reply_markup=types.ReplyKeyboardRemove())
     await state.clear()
 
+# FSM для создания заказа
+class OrderStates(StatesGroup):
+    waiting_for_platform = State()
+    waiting_for_quantity = State()
+    waiting_for_deadline = State()
+
+@dp.message(Command("addorder"))
+async def start_add_order(message: Message, state: FSMContext):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "customer":
+        await message.answer("Эта команда только для заказчиков.")
+        return
+    await message.answer("Введите площадку (например, VK, Telegram, Instagram):")
+    await state.set_state(OrderStates.waiting_for_platform)
+
+@dp.message(OrderStates.waiting_for_platform)
+async def order_platform(message: Message, state: FSMContext):
+    await state.update_data(platform=message.text)
+    await message.answer("Введите количество:")
+    await state.set_state(OrderStates.waiting_for_quantity)
+
+@dp.message(OrderStates.waiting_for_quantity)
+async def order_quantity(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Пожалуйста, введите число.")
+        return
+    await state.update_data(quantity=int(message.text))
+    await message.answer("Введите дедлайн (например, 2025-07-01):")
+    await state.set_state(OrderStates.waiting_for_deadline)
+
+@dp.message(OrderStates.waiting_for_deadline)
+async def order_deadline(message: Message, state: FSMContext):
+    data = await state.get_data()
+    platform = data["platform"]
+    quantity = data["quantity"]
+    deadline = message.text
+
+    user = get_user_by_telegram_id(message.from_user.id)
+    add_order(
+        customer_id=user[0],
+        platform=platform,
+        quantity=quantity,
+        deadline=deadline
+    )
+    await message.answer(f"Заказ создан!\nПлощадка: {platform}\nКол-во: {quantity}\nДедлайн: {deadline}")
+    await state.clear()
+
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     user = get_user_by_telegram_id(message.from_user.id)
@@ -89,14 +140,18 @@ async def cmd_help(message: Message):
         await message.answer(
             "/profile — ваш профиль\n"
             "/orders — ваши заказы\n"
-            "/addorder — добавить тестовый заказ\n"
+            "/addorder — добавить заказ\n"
+            "/deleteorder <id> — удалить заказ\n"
             "/changerole — сменить роль"
         )
     elif user[3] == "worker":
         await message.answer(
             "/profile — ваш профиль\n"
+            "/orders — ваши заказы\n"
             "/workorders — доступные заказы\n"
+            "/myorders — ваши взятые заказы\n"
             "/takeorder <id> — взять заказ\n"
+            "/done <id> — завершить заказ\n"
             "/changerole — сменить роль"
         )
     else:
@@ -113,10 +168,13 @@ async def cmd_profile(message: Message):
 @dp.message(Command("orders"))
 async def cmd_orders(message: Message):
     user = get_user_by_telegram_id(message.from_user.id)
-    if not user or user[3] != "customer":
-        await message.answer("Эта команда только для заказчиков.")
+    if not user:
+        await message.answer("Сначала зарегистрируйтесь через /start.")
         return
-    orders = get_orders_by_customer(user[0])
+    if user[3] == "customer":
+        orders = get_orders_by_customer(user[0])
+    else:
+        orders = get_orders_by_worker(user[0])
     if not orders:
         await message.answer("У вас пока нет заказов.")
     else:
@@ -124,21 +182,6 @@ async def cmd_orders(message: Message):
         for order in orders:
             text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Статус: {order[6]}\n"
         await message.answer(text)
-
-@dp.message(Command("addorder"))
-async def cmd_addorder(message: Message):
-    user = get_user_by_telegram_id(message.from_user.id)
-    if not user or user[3] != "customer":
-        await message.answer("Эта команда только для заказчиков.")
-        return
-    # Пример: добавляем тестовый заказ
-    add_order(
-        customer_id=user[0],
-        platform="VK",
-        quantity=10,
-        deadline="2025-07-01"
-    )
-    await message.answer("Заказ добавлен!")
 
 @dp.message(Command("workorders"))
 async def cmd_workorders(message: Message):
@@ -153,6 +196,21 @@ async def cmd_workorders(message: Message):
         text = "Доступные заказы:\n"
         for order in orders:
             text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Дедлайн: {order[5]}\n"
+        await message.answer(text)
+
+@dp.message(Command("myorders"))
+async def cmd_myorders(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "worker":
+        await message.answer("Эта команда только для исполнителей.")
+        return
+    orders = get_orders_by_worker(user[0])
+    if not orders:
+        await message.answer("У вас пока нет взятых заказов.")
+    else:
+        text = "Ваши заказы:\n"
+        for order in orders:
+            text += f"ID: {order[0]}, Площадка: {order[3]}, Кол-во: {order[4]}, Статус: {order[6]}\n"
         await message.answer(text)
 
 @dp.message(Command("takeorder"))
@@ -173,6 +231,62 @@ async def cmd_takeorder(message: Message):
         await message.answer(f"Вы взяли заказ №{order_id} в работу!")
     else:
         await message.answer("Не удалось взять заказ. Возможно, его уже взяли или он не существует.")
+
+@dp.message(Command("done"))
+async def cmd_done(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "worker":
+        await message.answer("Эта команда только для исполнителей.")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Используйте команду так: /done <id_заказа>")
+        return
+
+    order_id = int(parts[1])
+
+    # Проверяем, что заказ действительно принадлежит этому исполнителю и в работе
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM orders WHERE id = ? AND worker_id = ? AND status = 'in_progress'",
+        (order_id, user[0])
+    )
+    order = cursor.fetchone()
+    conn.close()
+
+    if not order:
+        await message.answer("Вы не можете завершить этот заказ (он не ваш или не в работе).")
+        return
+
+    set_order_status(order_id, "done")
+    delete_done_orders()
+    await message.answer(f"Заказ №{order_id} отмечен как выполненный и удалён из базы!")
+
+@dp.message(Command("deleteorder"))
+async def cmd_deleteorder(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "customer":
+        await message.answer("Эта команда только для заказчиков.")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Используйте команду так: /deleteorder <id_заказа>")
+        return
+
+    order_id = int(parts[1])
+    success = delete_order(order_id, user[0])
+    if success:
+        await message.answer(f"Заказ №{order_id} удалён.")
+    else:
+        await message.answer("Не удалось удалить заказ. Можно удалять только свои новые заказы.")
+
+@dp.message(Command("cleardone"))
+async def cmd_cleardone(message: Message):
+    delete_done_orders()
+    await message.answer("Все завершённые заказы удалены.")
 
 async def main():
     await dp.start_polling(bot)
