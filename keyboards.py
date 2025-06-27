@@ -40,12 +40,3 @@ def get_order_inline_kb(order_id):
             InlineKeyboardButton(text="Отменить", callback_data=f"cancel_{order_id}")
         ]
     ])
-
-history_filter_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Активные"), KeyboardButton(text="Выполненные")],
-        [KeyboardButton(text="Отменённые")],
-        [KeyboardButton(text="Назад")]
-    ],
-    resize_keyboard=True
-)

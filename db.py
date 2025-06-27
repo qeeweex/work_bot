@@ -180,8 +180,6 @@ def get_order_by_id(order_id):
     return order
 
 def get_user_by_id(user_id):
-    import sqlite3
-    from config import DB_NAME
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))

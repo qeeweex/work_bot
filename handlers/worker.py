@@ -1,14 +1,14 @@
 from aiogram.fsm.context import FSMContext
-from aiogram import Router
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from config import ADMINS
 from db import (
     get_order_by_id, get_user_by_id, get_user_by_telegram_id,
-    get_free_orders, get_orders_by_worker, assign_order_to_worker,
-    set_order_status, get_orders_by_worker_and_status
+    get_free_orders, assign_order_to_worker,
+    set_order_status, get_user_by_telegram_id, get_orders_by_worker
 )
-from keyboards import get_order_inline_kb, history_filter_kb
+from keyboards import get_order_inline_kb
 from utils import format_order
 
 router = Router()
@@ -41,29 +41,45 @@ async def cmd_help(message: Message):
         parse_mode="HTML"
     )
 
-@router.message(Command("myorders"))
-async def cmd_myorders(message: Message, state: FSMContext):
-    await message.answer("Выберите, какие заказы показать:", reply_markup=history_filter_kb)
-    await state.set_state("waiting_for_worker_order_status")
 
-@router.message()
-async def show_worker_orders_by_status(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == "waiting_for_worker_order_status" and message.text in ["Активные", "Выполненные", "Отменённые"]:
-        user = get_user_by_telegram_id(message.from_user.id)
-        status_map = {
-            "Активные": "Активен",
-            "Выполненные": "Выполнен",
-            "Отменённые": "Отменён"
-        }
-        status = status_map[message.text]
-        orders = get_orders_by_worker_and_status(user[0], status)
-        if not orders:
-            await message.answer("Нет заказов с таким статусом.")
-        else:
-            for order in orders:
-                await message.answer(format_order(order), parse_mode="HTML")
-        await state.clear()
+@router.message(Command("myorders"))
+async def my_orders_handler(message: types.Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    
+    if not user:
+        await message.answer("❌ Вы не зарегистрированы.")
+        return
+
+    if user[3] != "worker":
+        await message.answer("❌ Команда доступна только исполнителям. Используйте /changerole, чтобы сменить роль.")
+        return
+
+    orders = get_orders_by_worker(user[0])  # user[0] — это user.id
+    if not orders:
+        await message.answer("📭 У вас нет назначенных заказов.")
+        return
+
+    for order in orders:
+        text = format_order(order)
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="✅ Завершить", callback_data=f"done_{order[0]}")]
+        ])
+        await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith("done_"))
+async def done_order_handler(callback: types.CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    order = get_order_by_id(order_id)
+
+    if not order:
+        await callback.message.answer("❌ Заказ не найден.")
+        await callback.answer()
+        return
+
+    set_order_status(order_id, "Выполнен")
+    await callback.message.edit_reply_markup()  # Убираем кнопки
+    await callback.message.answer(f"✅ Заказ #{order_id} отмечен как выполненный.")
+    await callback.answer()
 
 @router.callback_query(lambda c: c.data.startswith("take_"))
 async def process_take_order(callback: CallbackQuery):
@@ -106,3 +122,8 @@ async def process_done_order(callback: CallbackQuery):
             "Ожидает подтверждения заказчиком.",
             parse_mode="HTML"
         )
+
+@router.message(Command("testworker"))
+async def test_handler(message: types.Message):
+    print("✅ Обработчик из worker.py сработал!")  # вывод в консоль
+    await message.answer("✅ worker.py подключён и работает!")
