@@ -5,11 +5,11 @@ from aiogram.fsm.context import FSMContext
 
 from db import (
     get_user_by_telegram_id, add_user, update_user_role, add_order,
-    set_order_status, delete_done_orders
+    set_order_status, delete_done_orders, get_orders_by_customer
 )
 from keyboards import role_kb, customer_kb, worker_kb
 from states import RegStates, OrderStates
-from utils import is_valid_date
+from utils import is_valid_date, format_order
 from config import ADMINS
 
 router = Router()
@@ -155,6 +155,21 @@ async def order_deadline(message: Message, state: FSMContext):
     )
     await message.answer(f"Заказ создан!\nПлощадка: {platform}\nКол-во: {quantity}\nДедлайн: {deadline}")
     await state.clear()
+
+@router.message(Command("orders"))
+async def cmd_customer_orders(message: Message):
+    user = get_user_by_telegram_id(message.from_user.id)
+    if not user or user[3] != "customer":
+        await message.answer("Эта команда только для заказчиков.")
+        return
+
+    orders = get_orders_by_customer(user[0])
+    if not orders:
+        await message.answer("📭 У вас пока нет заказов.")
+        return
+
+    for order in orders:
+        await message.answer(format_order(order), parse_mode="HTML")
 
 @router.callback_query(lambda c: c.data.startswith("confirm_"))
 async def process_confirm_order(callback: CallbackQuery):
